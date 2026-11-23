@@ -1,0 +1,188 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions", "orderByNulls"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pg_trgm]
+}
+
+enum ModelType {
+  LLM
+  MULTIMODAL
+  EMBEDDING
+  IMAGE
+  AUDIO
+  VIDEO
+}
+
+enum Modality {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
+}
+
+/// AI research lab / company that creates models (OpenAI, Meta, ...)
+model Lab {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  websiteUrl  String?
+  country     String?
+  foundedYear Int?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  models      AtlasModel[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("labs")
+}
+
+/// Inference provider that hosts models (Together, Groq, Azure, ...)
+model Provider {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  websiteUrl  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  models      ModelProvider[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("providers")
+}
+
+model AtlasModel {
+  id              String     @id @default(uuid())
+  slug            String     @unique
+  name            String
+  labId           String
+  type            ModelType  @default(LLM)
+  description     String?
+  contextWindow   Int
+  maxOutputTokens Int?
+  releaseDate     DateTime?
+  inputModalities  Modality[]
+  outputModalities Modality[]
+  isOpenSource    Boolean    @default(false)
+  parameterCount  String?
+
+  /// Denormalised cheapest price across active providers (USD / 1M tokens).
+  /// Maintained transactionally by src/common/pricing.util.ts. Enables indexed price sorting.
+  minInputPrice   Decimal?   @db.Decimal(12, 4)
+  minOutputPrice  Decimal?   @db.Decimal(12, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lab              Lab               @relation(fields: [labId], references: [id], onDelete: Restrict)
+  capabilities     ModelCapability[]
+  providers        ModelProvider[]
+  benchmarkScores  BenchmarkScore[]
+
+  @@index([labId])
+  @@index([type])
+  @@index([releaseDate])
+  @@index([contextWindow])
+  @@index([minInputPrice])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("models")
+}
+
+/// Per-provider offering of a model: price lives here because the same model costs different amounts per provider.
+model ModelProvider {
+  id                   String   @id @default(uuid())
+  modelId              String
+  providerId           String
+  inputPricePerMTok    Decimal  @db.Decimal(12, 4)
+  outputPricePerMTok   Decimal  @db.Decimal(12, 4)
+  maxOutputTokens      Int?
+  throughputTps        Float?
+  latencyMs            Int?
+  quantization         String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  model         AtlasModel     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  provider      Provider       @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  priceHistory  PriceHistory[]
+
+  @@unique([modelId, providerId])
+  @@index([providerId])
+  @@index([inputPricePerMTok])
+  @@map("model_providers")
+}
+
+model PriceHistory {
+  id                 String   @id @default(uuid())
+  modelProviderId    String
+  inputPricePerMTok  Decimal  @db.Decimal(12, 4)
+  outputPricePerMTok Decimal  @db.Decimal(12, 4)
+  recordedAt         DateTime @default(now())
+
+  modelProvider ModelProvider @relation(fields: [modelProviderId], references: [id], onDelete: Cascade)
+
+  @@index([modelProviderId, recordedAt])
+  @@map("price_history")
+}
+
+model Capability {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String?
+  models      ModelCapability[]
+
+  @@map("capabilities")
+}
+
+model ModelCapability {
+  modelId      String
+  capabilityId String
+  model        AtlasModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  capability   Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+
+  @@id([modelId, capabilityId])
+  @@index([capabilityId])
+  @@map("model_capabilities")
+}
+
+model Benchmark {
+  id             String   @id @default(uuid())
+  slug           String   @unique
+  name           String
+  category       String
+  description    String?
+  unit           String   @default("%")
+  higherIsBetter Boolean  @default(true)
+  maxScore       Float?
+  scores         BenchmarkScore[]
+
+  @@index([category])
+  @@map("benchmarks")
+}
+
+model BenchmarkScore {
+  id          String    @id @default(uuid())
+  modelId     String
+  benchmarkId String
+  score       Float
+  source      String?
+  measuredAt  DateTime?
+
+  model     AtlasModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  benchmark Benchmark  @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  @@unique([modelId, benchmarkId])
+  @@index([benchmarkId, score])
+  @@map("benchmark_scores")
+}
