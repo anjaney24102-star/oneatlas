@@ -1,9 +1,10 @@
 # OneAtlas API: AI model discovery & intelligence platform (Backend)
 
 NestJS + TypeScript + Prisma + PostgreSQL. Browse, search, filter, sort, compare and rank AI models across labs and
-inference providers, with per-provider pricing, benchmarks and price history.
+inference providers, with per-provider pricing, benchmarks and price history. Includes a lightweight model catalog UI
+served by the API application.
 
-> Role: **Backend Engineer**. Swagger UI at `/docs` is the interactive frontend for this API.
+> The model catalog is available at `/`; Swagger UI at `/docs` is the interactive API reference.
 
 ## Quick start
 
@@ -17,6 +18,9 @@ npm run start:dev                    # http://localhost:3000/docs
 npm run ingest:openrouter            # optional: ingest live catalogue from OpenRouter
 npm run test:e2e                     # needs the seeded DB
 ```
+Open `http://localhost:3000/` for the model catalog. The UI and API are served by the same app, so deploying the existing
+service also deploys the frontend; no separate frontend build or service is required.
+
 > Commit the generated `prisma/migrations/` folder, since production runs `prisma migrate deploy`.
 
 ## Architecture
@@ -99,7 +103,7 @@ EXPLAIN ANALYZE SELECT slug FROM models ORDER BY "minInputPrice" ASC NULLS LAST,
 
 ## Deployment (Neon + Render/Railway)
 1. Create a Neon project, copy the **pooled** URL to `DATABASE_URL` and the **direct** URL to `DIRECT_URL`.
-2. Render/Railway web service: build `npm ci && npm run build && npx prisma migrate deploy`, start `npm run start:prod`.
+2. Render/Railway web service: build `npm ci && npm run build && npx prisma migrate deploy`, start `npm run start:prod`. The frontend is served from `/` by this service.
 3. Env: `DATABASE_URL, DIRECT_URL, ADMIN_API_KEY, PORT`. Run `npm run seed` once against the production DB.
 
 ## Data disclaimer
