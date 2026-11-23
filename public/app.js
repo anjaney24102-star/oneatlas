@@ -1,4 +1,5 @@
-const API_ROOT = '/api/v1';
+const API_BASE = 'https://oneatlas-1.onrender.com';
+const API_ROOT = `${API_BASE}/api/v1`;
 const PAGE_SIZE = 12;
 
 const elements = {
@@ -221,7 +222,7 @@ async function showModelDetails(slug) {
 
 async function checkApiStatus() {
   try {
-    await fetchJson('/health');
+    await fetchJson(`${API_BASE}/health`);
     elements.statusDot.className = 'status-dot online';
     elements.statusLabel.textContent = 'API online';
   } catch {
